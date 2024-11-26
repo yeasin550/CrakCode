@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FaEdit } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
 import { Link } from "react-router-dom";
 
@@ -9,6 +10,9 @@ const Task = () => {
     const [searchTerm, setSearchTerm] = useState(""); // For search
     const [currentPage, setCurrentPage] = useState(1); // For pagination
     const itemsPerPage = 9; // Items per page
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentTask, setCurrentTask] = useState(null);
+    const [updatedData, setUpdatedData] = useState({ title: "", description: "" });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -27,6 +31,27 @@ const Task = () => {
 
         fetchData();
     }, []);
+
+    const handleDeleteTask = async (id) => {
+        try {
+            const response = await fetch(`http://localhost:5000/task/${id}`, {
+                method: "DELETE",
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log(result.message); // Logs success message from the server
+
+                // Update state to reflect deleted task in real-time
+                setData((prevData) => prevData.filter((task) => task.id !== id));
+                setFilteredData((prevData) => prevData.filter((task) => task.id !== id)); // For search results
+            } else {
+                console.error("Failed to delete task");
+            }
+        } catch (error) {
+            console.error("Error deleting task:", error);
+        }
+    };
 
     // Handle search
     const handleSearch = (event) => {
@@ -61,6 +86,71 @@ const Task = () => {
         </div>
     );
 
+
+
+
+    const openEditModal = (task) => {
+        setCurrentTask(task);
+        setUpdatedData({ title: task.title, description: task.description });
+        setIsEditing(true);
+    };
+
+    const handleUpdateChange = (e) => {
+        setUpdatedData({ ...updatedData, [e.target.name]: e.target.value });
+    };
+
+    const handleUpdateTask = async () => {
+        try {
+            const response = await fetch(`http://localhost:5000/task/${currentTask.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatedData),
+            });
+
+            if (response.ok) {
+                const updatedTask = await response.json();
+
+                setData((prevTasks) =>
+                    prevTasks.map((task) =>
+                        task.id === updatedTask.id ? updatedTask : task
+                    )
+                );
+                setFilteredData((prevTasks) =>
+                    prevTasks.map((task) =>
+                        task.id === updatedTask.id ? updatedTask : task
+                    )
+                );
+                setIsEditing(false);
+
+                // Show success message
+                const successMessage = document.createElement('div');
+                successMessage.textContent = 'Task updated successfully!';
+                successMessage.style.position = 'fixed';
+                successMessage.style.top = '70px';
+                successMessage.style.right = '20px';
+                successMessage.style.padding = '10px';
+                successMessage.style.backgroundColor = 'green';
+                successMessage.style.color = 'white';
+                successMessage.style.borderRadius = '5px';
+                successMessage.style.fontSize = '16px';
+                successMessage.style.zIndex = '1000';
+
+                document.body.appendChild(successMessage);
+
+                // Remove the message after 3 seconds
+                setTimeout(() => {
+                    successMessage.remove();
+                }, 3000);
+            } else {
+                const errorResponse = await response.json();
+                console.error('Failed to update task:', errorResponse.message);
+            }
+        } catch (error) {
+            console.error('Error updating task:', error);
+        }
+    };
+
+
     return (
         <div className="max-w-[1200px] mx-auto py-12 px-5">
             {/* Header */}
@@ -91,28 +181,72 @@ const Task = () => {
             {/* Tasks */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {loading ? (
-                    <Spinner />
+                    <p>Loading...</p>
                 ) : currentPageData.length > 0 ? (
-                    currentPageData.map((item) => (
+                    currentPageData.map((task) => (
                         <div
-                            key={item.id}
-                            className="relative p-3 border border-black rounded-md hover:border-[#FF0000] group cursor-pointer"
+                            key={task.id}
+                            className="relative p-3 border border-black rounded-md hover:border-red-500 group cursor-pointer"
                         >
-                            {/* Delete Icon */}
                             <button
-                                className="absolute top-2 right-2 p-[6px] bg-[#FF0000] text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => openEditModal(task)}
+                                className="absolute top-2 right-11 p-[6px] bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <FaEdit className="text-[20px]" />
+                            </button>
+
+                            <button
+                                onClick={() => handleDeleteTask(task.id)}
+                                className="absolute top-2 right-2 p-[6px] bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                                 <MdDelete className="text-[20px]" />
                             </button>
-                            {/* Card Content */}
-                            <h1 className="text-lg font-bold">{item.title}</h1>
-                            <p>{item.description}</p>
+
+                            <h1 className="text-lg font-bold">{task.title}</h1>
+                            <p>{task.description}</p>
                         </div>
                     ))
                 ) : (
                     <p className="text-center col-span-2 md:col-span-3">No tasks found.</p>
                 )}
             </div>
+
+            {isEditing && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="bg-white p-6 rounded-lg w-1/3">
+                        <h2 className="text-xl font-bold mb-4">Edit Task</h2>
+                        <input
+                            type="text"
+                            name="title"
+                            value={updatedData.title}
+                            onChange={handleUpdateChange}
+                            className="w-full mb-4 p-2 border border-black rounded"
+                            placeholder="Title"
+                        />
+                        <textarea
+                            name="description"
+                            value={updatedData.description}
+                            onChange={handleUpdateChange}
+                            className="w-full mb-4 p-2 border border-black rounded"
+                            placeholder="Description"
+                        />
+                        <div className="flex justify-end gap-4">
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                className="px-4 py-2 bg-gray-300 rounded"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateTask}
+                                className="px-4 py-2 bg-red-500 text-white rounded"
+                            >
+                                Update
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Pagination */}
             {/* <div className="mt-8">
